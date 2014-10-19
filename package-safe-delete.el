@@ -83,17 +83,16 @@ them, or if one of the PACKAGES is not installed."
       (error "Package `%S' is not installed" package)))
   (let ((dependencies (package-safe-delete--installed-package-dependencies packages)))
     (dolist (package packages)
-      (let ((dependent+packages (gethash package dependencies)))
-        (pcase dependent+packages
-          (`nil)
-          (`(,dependent+package)
-           (error "Cannot delete `%S' because it's required by `%S'"
-                  package
-                  dependent+package))
-          (_
-           (error "Cannot delete `%S' because it's required by: %s"
-                  package
-                  (mapconcat #'symbol-name dependent+packages ", ")))))))
+      (pcase (gethash package dependencies)
+        (`nil)
+        (`(,dependent+package)
+         (error "Cannot delete `%S' because it's required by `%S'"
+                package
+                dependent+package))
+        (dependent+packages
+         (error "Cannot delete `%S' because it's required by: %s"
+                package
+                (mapconcat #'symbol-name dependent+packages ", "))))))
   (package-safe-delete--delete packages))
 
 ;;;###autoload
