@@ -162,6 +162,11 @@ packages are deleted."
                         installed
                         packages)))
     (package-safe-delete--ensure-no-dependencies packages dependencies)
+    ;; Convert those lists into hash tables because they're less of a hassle to
+    ;; modify.
+    (maphash (lambda (k v)
+               (puthash k (package-safe-delete--list-to-hashtable v) dependencies))
+             dependencies)
     (let ((totalpackages '()))
       (while packages
         (let ((pendingdependencies '()))
@@ -170,27 +175,12 @@ packages are deleted."
               (dolist (requirement (epl-package-requirements package))
                 (let* ((requirementname (epl-requirement-name requirement))
                        (requirementbucket (gethash requirementname dependencies)))
-                  (when (or
-                         ;; Nothing except packages from `packages' depended on
-                         ;; `requirement' in the first place.
-                         (not requirementbucket)
-                         (progn
-                           (unless (hash-table-p requirementbucket)
-                             ;; Bucket still in list format, turn it into a hash
-                             ;; table.
-                             ;; Note: we turn it into a hash table because it's
-                             ;; less of a hassle to modify it.
-                             (setq requirementbucket
-                                   (puthash
-                                    requirementname
-                                    (package-safe-delete--list-to-hashtable requirementbucket)
-                                    dependencies)))
-                           ;; The bucket is surely in hash table format at this
-                           ;; point.
-                           (remhash packagename requirementbucket)
-                           ;; Was `package' the last package requiring
-                           ;; `requirement'?
-                           (= 0 (hash-table-count requirementbucket))))
+                  (when (or (not requirementbucket)
+                            (progn
+                              (remhash packagename requirementbucket)
+                              ;; Was `package' the last package requiring
+                              ;; `requirement'?
+                              (= 0 (hash-table-count requirementbucket))))
                     (when (memq requirementname installednames)
                       (push requirementname pendingdependencies)))))))
           ;; We're done with `packages', handle their direct dependencies now.
