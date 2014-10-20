@@ -53,15 +53,15 @@ Dependencies of EXCLUDED packages are ignored.
 
 The returned value is a hash table of the form package => list of packages
 requiring it."
-  (let ((packages (mapcar #'epl-package-name installed))
+  (let ((installednames (mapcar #'epl-package-name installed))
         (dependencies (make-hash-table :test #'eq)))
-    (dolist (packagedescriptor installed)
-      (let ((package (epl-package-name packagedescriptor)))
-        (unless (memq package excluded)
-          (dolist (requirementdescriptor (epl-package-requirements packagedescriptor))
-            (let ((requirement (epl-requirement-name requirementdescriptor)))
-              (when (memq requirement packages)
-                (push package (gethash requirement dependencies))))))))
+    (dolist (package installed)
+      (let ((packagename (epl-package-name package)))
+        (unless (memq packagename excluded)
+          (dolist (requirement (epl-package-requirements package))
+            (let ((requirementname (epl-requirement-name requirement)))
+              (when (memq requirementname installednames)
+                (push packagename (gethash requirementname dependencies))))))))
     dependencies))
 
 (defun package-safe-delete--delete (packages force)
@@ -127,9 +127,9 @@ them, or if one of the PACKAGES is not installed.
 With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
   (package-safe-delete--ensure-installed packages)
-  (let* ((packagedescriptors (epl-installed-packages))
+  (let* ((installed (epl-installed-packages))
          (dependencies (package-safe-delete--installed-package-dependencies
-                        packagedescriptors
+                        installed
                         packages)))
     (package-safe-delete--ensure-no-dependencies packages dependencies))
   (package-safe-delete--delete packages force))
@@ -156,34 +156,46 @@ them, or if one of the PACKAGES is not installed.
 With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
   (package-safe-delete--ensure-installed packages)
-  (let* ((packagedescriptors (epl-installed-packages))
-         (installedpackages (mapcar #'epl-package-name packagedescriptors))
+  (let* ((installed (epl-installed-packages))
+         (installednames (mapcar #'epl-package-name installed))
          (dependencies (package-safe-delete--installed-package-dependencies
-                        packagedescriptors
+                        installed
                         packages)))
     (package-safe-delete--ensure-no-dependencies packages dependencies)
     (let ((totalpackages '()))
       (while packages
-        (let ((pendingpackages '()))
-          (dolist (package packages)
-            (dolist (packagedescriptor (epl-find-installed-packages package))
-              (dolist (requirementdescriptor (epl-package-requirements packagedescriptor))
-                (let* ((requirement (epl-requirement-name requirementdescriptor))
-                       (requirementbucket (gethash requirement dependencies)))
-                  (when (or (not requirementbucket)
-                            (progn
-                              (unless (hash-table-p requirementbucket)
-                                (setq requirementbucket
-                                      (puthash
-                                       requirement
-                                       (package-safe-delete--list-to-hashtable requirementbucket)
-                                       dependencies)))
-                              (remhash package requirementbucket)
-                              (= 0 (hash-table-count requirementbucket))))
-                    (when (memq requirement installedpackages)
-                      (push requirement pendingpackages)))))))
+        (let ((pendingdependencies '()))
+          (dolist (packagename packages)
+            (dolist (package (epl-find-installed-packages packagename))
+              (dolist (requirement (epl-package-requirements package))
+                (let* ((requirementname (epl-requirement-name requirement))
+                       (requirementbucket (gethash requirementname dependencies)))
+                  (when (or
+                         ;; Nothing except packages from `packages' depended on
+                         ;; `requirement' in the first place.
+                         (not requirementbucket)
+                         (progn
+                           (unless (hash-table-p requirementbucket)
+                             ;; Bucket still in list format, turn it into a hash
+                             ;; table.
+                             ;; Note: we turn it into a hash table because it's
+                             ;; less of a hassle to modify it.
+                             (setq requirementbucket
+                                   (puthash
+                                    requirementname
+                                    (package-safe-delete--list-to-hashtable requirementbucket)
+                                    dependencies)))
+                           ;; The bucket is surely in hash table format at this
+                           ;; point.
+                           (remhash packagename requirementbucket)
+                           ;; Was `package' the last package requiring
+                           ;; `requirement'?
+                           (= 0 (hash-table-count requirementbucket))))
+                    (when (memq requirementname installednames)
+                      (push requirementname pendingdependencies)))))))
+          ;; We're done with `packages', handle their direct dependencies now.
           (setq totalpackages (append packages totalpackages))
-          (setq packages pendingpackages)))
+          (setq packages pendingdependencies)))
       (setq packages totalpackages)))
   (package-safe-delete--delete packages force))
 
