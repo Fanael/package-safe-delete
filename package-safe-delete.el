@@ -73,6 +73,16 @@ packages are deleted."
     (dolist (package packages)
       (mapc #'epl-package-delete (epl-find-installed-packages package)))))
 
+(defun package-safe-delete--prompt-package-name (prompt)
+  "Read a package name in the minibuffer.
+PROMPT is a string to prompt with."
+  (list
+   (intern
+    (completing-read prompt
+                     (mapcar #'epl-package-name (epl-installed-packages))
+                     nil
+                     t))))
+
 ;;;###autoload
 (defun package-safe-delete-packages (packages &optional force)
   "Delete PACKAGES.
@@ -106,13 +116,7 @@ packages are deleted."
 PACKAGE is a package name symbol.
 PACKAGE is not deleted when there are other packages requiring it.
 Interactively, prompt for its name."
-  (interactive
-   (list
-    (intern
-     (completing-read "Delete package: "
-                      (mapcar #'epl-package-name (epl-installed-packages))
-                      nil
-                      t))))
+  (interactive (package-safe-delete--prompt-package-name "Delete package: "))
   (package-safe-delete-packages (list package)))
 
 (provide 'package-safe-delete)
