@@ -56,28 +56,32 @@ requiring it."
                 (push package (gethash requirement dependencies))))))))
     dependencies))
 
-(defun package-safe-delete--delete (packages)
+(defun package-safe-delete--delete (packages force)
   "Delete PACKAGES.
 
 PACKAGES is a list of package name symbols.
-The user is prompted before the packages are deleted."
-  (when (yes-or-no-p
-         (pcase packages
-           (`(,package)
-            (format "Delete package `%s'? " package))
-           (_
-            (format "Delete these packages: %s? "
-                    (mapconcat #'symbol-name packages ", ")))))
+With FORCE non-nil, the user is not prompted for confirmation before the
+packages are deleted."
+  (when (or force
+            (yes-or-no-p
+             (pcase packages
+               (`(,package)
+                (format "Delete package `%s'? " package))
+               (_
+                (format "Delete these packages: %s? "
+                        (mapconcat #'symbol-name packages ", "))))))
     (dolist (package packages)
       (mapc #'epl-package-delete (epl-find-installed-packages package)))))
 
 ;;;###autoload
-(defun package-safe-delete-packages (packages)
+(defun package-safe-delete-packages (packages &optional force)
   "Delete PACKAGES.
 
 PACKAGES is a list of package name symbols.
 None of the PACKAGES are deleted when there's a package depending on one of
-them, or if one of the PACKAGES is not installed."
+them, or if one of the PACKAGES is not installed.
+With FORCE non-nil, the user is not prompted for confirmation before the
+packages are deleted."
   (dolist (package packages)
     (unless (epl-package-installed-p package)
       (error "Package `%S' is not installed" package)))
@@ -93,7 +97,7 @@ them, or if one of the PACKAGES is not installed."
          (error "Cannot delete `%S' because it's required by: %s"
                 package
                 (mapconcat #'symbol-name dependent+packages ", "))))))
-  (package-safe-delete--delete packages))
+  (package-safe-delete--delete packages force))
 
 ;;;###autoload
 (defun package-safe-delete (package)
