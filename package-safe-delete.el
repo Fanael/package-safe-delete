@@ -175,7 +175,7 @@ packages are deleted."
               (dolist (requirement (epl-package-requirements package))
                 (let* ((requirementname (epl-requirement-name requirement))
                        (requirementbucket (gethash requirementname dependencies)))
-                  (when (or (not requirementbucket)
+                  (when (or (null requirementbucket)
                             (progn
                               (remhash packagename requirementbucket)
                               ;; Was `package' the last package requiring
