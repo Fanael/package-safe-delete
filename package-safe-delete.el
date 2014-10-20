@@ -39,20 +39,28 @@
 ;;; Code:
 (require 'epl)
 
-(defun package-safe-delete--installed-package-dependencies (excluded)
+(defun package-safe-delete--list-to-hashtable (list)
+  "Convert a LIST based set to a hashtable based set."
+  (let ((result (make-hash-table :test #'eq)))
+    (dolist (elt list)
+      (puthash elt t result))
+    result))
+
+(defun package-safe-delete--installed-package-dependencies (installed excluded)
   "Get a dependency tree of the installed packages.
+INSTALLED is a list of EPL package descriptors of installed packages.
 Dependencies of EXCLUDED packages are ignored.
 
 The returned value is a hash table of the form package => list of packages
 requiring it."
-  (let ((package+descriptors (epl-installed-packages))
+  (let ((packages (mapcar #'epl-package-name installed))
         (dependencies (make-hash-table :test #'eq)))
-    (dolist (package+descriptor package+descriptors)
+    (dolist (package+descriptor installed)
       (let ((package (epl-package-name package+descriptor)))
         (unless (memq package excluded)
           (dolist (requirement+descriptor (epl-package-requirements package+descriptor))
             (let ((requirement (epl-requirement-name requirement+descriptor)))
-              (when (epl-package-installed-p requirement)
+              (when (memq requirement packages)
                 (push package (gethash requirement dependencies))))))))
     dependencies))
 
@@ -119,7 +127,10 @@ them, or if one of the PACKAGES is not installed.
 With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
   (package-safe-delete--ensure-installed packages)
-  (let ((dependencies (package-safe-delete--installed-package-dependencies packages)))
+  (let* ((package+descriptors (epl-installed-packages))
+         (dependencies (package-safe-delete--installed-package-dependencies
+                        package+descriptors
+                        packages)))
     (package-safe-delete--ensure-no-dependencies packages dependencies))
   (package-safe-delete--delete packages force))
 
@@ -132,6 +143,61 @@ PACKAGE is not deleted when there are other packages requiring it.
 Interactively, prompt for its name."
   (interactive (package-safe-delete--prompt-package-name "Delete package: "))
   (package-safe-delete-packages (list package)))
+
+;;;###autoload
+(defun package-safe-delete-packages-recursively (packages &optional force)
+  "Delete PACKAGES.
+Each of the PACKAGES and every packages required only by the PACKAGES are
+deleted.
+
+PACKAGES is a list of package name symbols.
+None of the PACKAGES are deleted when there's a package depending on one of
+them, or if one of the PACKAGES is not installed.
+With FORCE non-nil, the user is not prompted for confirmation before the
+packages are deleted."
+  (package-safe-delete--ensure-installed packages)
+  (let* ((package+descriptors (epl-installed-packages))
+         (installed+packages (mapcar #'epl-package-name package+descriptors))
+         (dependencies (package-safe-delete--installed-package-dependencies
+                        package+descriptors
+                        packages)))
+    (package-safe-delete--ensure-no-dependencies packages dependencies)
+    (let ((total+packages '()))
+      (while packages
+        (let ((pending+packages '()))
+          (dolist (package packages)
+            (dolist (package+descriptor (epl-find-installed-packages package))
+              (dolist (requirement+descriptor (epl-package-requirements package+descriptor))
+                (let* ((requirement (epl-requirement-name requirement+descriptor))
+                       (requirement+bucket (gethash requirement dependencies)))
+                  (when (or (not requirement+bucket)
+                            (progn
+                              (unless (hash-table-p requirement+bucket)
+                                (setq requirement+bucket
+                                      (puthash
+                                       requirement
+                                       (package-safe-delete--list-to-hashtable requirement+bucket)
+                                       dependencies)))
+                              (remhash package requirement+bucket)
+                              (= 0 (hash-table-count requirement+bucket))))
+                    (when (memq requirement installed+packages)
+                      (push requirement pending+packages)))))))
+          (setq total+packages (append packages total+packages))
+          (setq packages pending+packages)))
+      (setq packages total+packages)))
+  (package-safe-delete--delete packages force))
+
+;;;###autoload
+(defun package-safe-delete-recursively (package)
+  "Recursively delete a PACKAGE.
+PACKAGE and all packages required only by it are deleted.
+
+PACKAGE is a package name symbol.
+PACKAGE is not deleted when there are other packages requiring it.
+Interactively, prompt for its name."
+  (interactive (package-safe-delete--prompt-package-name
+                "Recursively delete package: "))
+  (package-safe-delete-packages-recursively (list package)))
 
 (provide 'package-safe-delete)
 ;;; package-safe-delete.el ends here
