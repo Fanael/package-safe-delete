@@ -37,7 +37,24 @@
 ;; Delete package.el packages safely, without leaving unresolved dependencies.
 
 ;;; Code:
+(eval-when-compile (require 'cl-lib))
 (require 'epl)
+
+(cl-defstruct (package-safe-delete--packages
+               (:constructor nil)
+               (:constructor package-safe-delete--packages-make-internal
+                             (packages names))
+               (:copier nil)
+               (:predicate nil)
+               (:type vector) :named)
+  packages
+  names)
+
+(defun package-safe-delete--installed-packages ()
+  "Create a `package-safe-delete--packages' containing all installed packages."
+  (let* ((installed (epl-installed-packages))
+         (names (mapcar #'epl-package-name installed)))
+    (package-safe-delete--packages-make-internal installed names)))
 
 (defun package-safe-delete--list-to-hashtable (list)
   "Convert a LIST based set to a hashtable based set."
@@ -48,14 +65,15 @@
 
 (defun package-safe-delete--installed-package-dependencies (installed excluded)
   "Get a dependency tree of the installed packages.
-INSTALLED is a list of EPL package descriptors of installed packages.
+INSTALLED is a `package-safe-delete--packages' containing all installed
+packages.
 Dependencies of EXCLUDED packages are ignored.
 
 The returned value is a hash table of the form package => list of packages
 requiring it."
-  (let ((installednames (mapcar #'epl-package-name installed))
+  (let ((installednames (package-safe-delete--packages-names installed))
         (dependencies (make-hash-table :test #'eq)))
-    (dolist (package installed)
+    (dolist (package (package-safe-delete--packages-packages installed))
       (let ((packagename (epl-package-name package)))
         (unless (memq packagename excluded)
           (dolist (requirement (epl-package-requirements package))
@@ -127,7 +145,7 @@ them, or if one of the PACKAGES is not installed.
 With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
   (package-safe-delete--ensure-installed packages)
-  (let* ((installed (epl-installed-packages))
+  (let* ((installed (package-safe-delete--installed-packages))
          (dependencies (package-safe-delete--installed-package-dependencies
                         installed
                         packages)))
@@ -156,8 +174,8 @@ them, or if one of the PACKAGES is not installed.
 With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
   (package-safe-delete--ensure-installed packages)
-  (let* ((installed (epl-installed-packages))
-         (installednames (mapcar #'epl-package-name installed))
+  (let* ((installed (package-safe-delete--installed-packages))
+         (installednames (package-safe-delete--packages-names installed))
          (dependencies (package-safe-delete--installed-package-dependencies
                         installed
                         packages)))
