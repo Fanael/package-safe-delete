@@ -83,6 +83,13 @@ PROMPT is a string to prompt with."
                      nil
                      t))))
 
+(defun package-safe-delete--ensure-installed (packages)
+  "Ensure all PACKAGES are installed.
+If at least one is not installed, an error is signaled."
+  (dolist (package packages)
+    (unless (epl-package-installed-p package)
+      (error "Package `%S' is not installed" package))))
+
 ;;;###autoload
 (defun package-safe-delete-packages (packages &optional force)
   "Delete PACKAGES.
@@ -92,9 +99,7 @@ None of the PACKAGES are deleted when there's a package depending on one of
 them, or if one of the PACKAGES is not installed.
 With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
-  (dolist (package packages)
-    (unless (epl-package-installed-p package)
-      (error "Package `%S' is not installed" package)))
+  (package-safe-delete--ensure-installed packages)
   (let ((dependencies (package-safe-delete--installed-package-dependencies packages)))
     (dolist (package packages)
       (pcase (gethash package dependencies)
