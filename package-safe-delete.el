@@ -235,5 +235,28 @@ Interactively, prompt for its name."
                 "Recursively delete package: "))
   (package-safe-delete-packages-recursively (list package)))
 
+;;;###autoload
+(defun package-safe-delete-all (&optional force)
+  "Delete all packages not explicitly required.
+
+With FORCE non-nil, the user is not prompted for confirmation before the
+packages are deleted."
+  (interactive)
+  (let* ((installed (package-safe-delete--installed-packages))
+         (installednames (package-safe-delete--packages-names installed))
+         (dependencies (package-safe-delete--installed-package-dependencies
+                        installed
+                        '()))
+         (packagestodelete '()))
+    ;; Collect only those packages not required by the user and not required by
+    ;; other packages, `package-safe-delete-packages-recursively' will take care
+    ;; of the rest.
+    (dolist (packagename installednames)
+      (when (and (null (gethash packagename dependencies))
+                 (null (memq packagename
+                             package-safe-delete-required-packages)))
+        (push packagename packagestodelete)))
+    (package-safe-delete-packages-recursively packagestodelete force)))
+
 (provide 'package-safe-delete)
 ;;; package-safe-delete.el ends here
