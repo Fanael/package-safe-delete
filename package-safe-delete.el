@@ -40,6 +40,19 @@
 (eval-when-compile (require 'cl-lib))
 (require 'epl)
 
+(defgroup package-safe-delete nil
+  "Safely remove package.el packages."
+  :group 'package)
+
+(defcustom package-safe-delete-required-packages '()
+  "List of explicitly required packages.
+Each element is a package name, as a symbol.
+
+The packages in this list are treated as required by a dummy package, and thus
+are never deleted."
+  :type '(repeat symbol)
+  :group 'package-safe-delete)
+
 (cl-defstruct (package-safe-delete--packages
                (:constructor nil)
                (:constructor package-safe-delete--packages-make-internal
@@ -80,6 +93,9 @@ requiring it."
             (let ((requirementname (epl-requirement-name requirement)))
               (when (memq requirementname installednames)
                 (push packagename (gethash requirementname dependencies))))))))
+    (let ((requiredpackagesymbol (make-symbol "<required-package>")))
+      (dolist (requiredpackage package-safe-delete-required-packages)
+        (push requiredpackagesymbol (gethash requiredpackage dependencies))))
     dependencies))
 
 (defun package-safe-delete--delete (packages force)
