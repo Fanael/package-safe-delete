@@ -3,7 +3,7 @@
 ;; Author: Fanael Linithien <fanael4@gmail.com>
 ;; URL: https://github.com/Fanael/package-safe-delete
 ;; Version: 0.1.4
-;; Package-Requires: ((emacs "24") (epl "0.7-cvs") (cl-lib "0.5"))
+;; Package-Requires: ((emacs "24") (epl "0.7-cvs"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -37,9 +37,10 @@
 ;; Delete package.el packages safely, without leaving unresolved dependencies.
 
 ;;; Code:
-;; Note: in Emacs 24.2 and below we can use generalized variables thanks to
-;; `cl-lib', which brings GV code from `cl' into scope.
-(eval-when-compile (require 'cl-lib))
+;; Ensure generalized variables are available.
+(eval-when-compile
+  (unless (require 'gv nil t)
+    (require 'cl)))
 (require 'epl)
 
 (defgroup package-safe-delete nil
@@ -55,21 +56,12 @@ are never deleted."
   :type '(repeat symbol)
   :group 'package-safe-delete)
 
-(cl-defstruct (package-safe-delete--packages
-               (:constructor nil)
-               (:constructor package-safe-delete--packages-make-internal
-                             (packages names))
-               (:copier nil)
-               (:predicate nil)
-               (:type vector) :named)
-  packages
-  names)
-
 (defun package-safe-delete--installed-packages ()
-  "Create a `package-safe-delete--packages' containing all installed packages."
-  (let* ((installed (epl-installed-packages))
-         (names (mapcar #'epl-package-name installed)))
-    (package-safe-delete--packages-make-internal installed names)))
+  "Create a list of installed packages.
+Elements are of the form (PACKAGE-NAME . PACKAGE-DESCRIPTOR)."
+  (mapcar (lambda (package)
+            (cons (epl-package-name package) package))
+          (epl-installed-packages)))
 
 (defun package-safe-delete--list-to-hashtable (list)
   "Convert a LIST based set to a hashtable based set."
@@ -80,20 +72,19 @@ are never deleted."
 
 (defun package-safe-delete--installed-package-dependencies (installed excluded)
   "Get a dependency tree of the installed packages.
-INSTALLED is a `package-safe-delete--packages' containing all installed
-packages.
+INSTALLED is a list of installed packages as returned by
+`package-safe-delete--installed-packages'.
 Dependencies of EXCLUDED packages are ignored.
 
 The returned value is a hash table of the form package => list of packages
 requiring it."
-  (let ((installed-names (package-safe-delete--packages-names installed))
-        (dependencies (make-hash-table :test #'eq)))
-    (dolist (package (package-safe-delete--packages-packages installed))
-      (let ((package-name (epl-package-name package)))
+  (let ((dependencies (make-hash-table :test #'eq)))
+    (dolist (package-entry installed)
+      (let ((package-name (car package-entry)))
         (unless (memq package-name excluded)
-          (dolist (requirement (epl-package-requirements package))
+          (dolist (requirement (epl-package-requirements (cdr package-entry)))
             (let ((requirement-name (epl-requirement-name requirement)))
-              (when (memq requirement-name installed-names)
+              (when (assq requirement-name installed)
                 (push package-name (gethash requirement-name dependencies))))))))
     (let ((required-package-symbol (make-symbol "<required-package>")))
       (dolist (required-package package-safe-delete-required-packages)
@@ -193,7 +184,6 @@ With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
   (package-safe-delete--ensure-installed packages)
   (let* ((installed (package-safe-delete--installed-packages))
-         (installed-names (package-safe-delete--packages-names installed))
          (dependencies (package-safe-delete--installed-package-dependencies
                         installed
                         packages)))
@@ -217,7 +207,7 @@ packages are deleted."
                               ;; Was `package' the last package requiring
                               ;; `requirement'?
                               (= 0 (hash-table-count requirement-bucket))))
-                    (when (memq requirement-name installed-names)
+                    (when (assq requirement-name installed)
                       (push requirement-name pending-dependencies)))))))
           ;; We're done with `packages', handle their direct dependencies now.
           (setq total-packages (append packages total-packages))
@@ -245,7 +235,6 @@ With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
   (interactive)
   (let* ((installed (package-safe-delete--installed-packages))
-         (installed-names (package-safe-delete--packages-names installed))
          (dependencies (package-safe-delete--installed-package-dependencies
                         installed
                         '()))
@@ -253,11 +242,11 @@ packages are deleted."
     ;; Collect only those packages not required by the user and not required by
     ;; other packages, `package-safe-delete-packages-recursively' will take care
     ;; of the rest.
-    (dolist (package-name installed-names)
-      (when (and (null (gethash package-name dependencies))
-                 (null (memq package-name
-                             package-safe-delete-required-packages)))
-        (push package-name packages-to-delete)))
+    (dolist (package-entry installed)
+      (let ((package-name (car package-entry)))
+        (when (and (null (gethash package-name dependencies))
+                   (null (memq package-name package-safe-delete-required-packages)))
+          (push package-name packages-to-delete))))
     (package-safe-delete-packages-recursively packages-to-delete force)))
 
 (provide 'package-safe-delete)
