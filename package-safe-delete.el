@@ -3,7 +3,7 @@
 ;; Author: Fanael Linithien <fanael4@gmail.com>
 ;; URL: https://github.com/Fanael/package-safe-delete
 ;; Version: 0.1.4
-;; Package-Requires: ((emacs "24.3") (epl "0.7-cvs"))
+;; Package-Requires: ((emacs "24") (epl "0.7-cvs") (cl-lib "0.5"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -37,6 +37,8 @@
 ;; Delete package.el packages safely, without leaving unresolved dependencies.
 
 ;;; Code:
+;; Note: in Emacs 24.2 and below we can use generalized variables thanks to
+;; `cl-lib', which brings GV code from `cl' into scope.
 (eval-when-compile (require 'cl-lib))
 (require 'epl)
 
