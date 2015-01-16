@@ -113,16 +113,19 @@ requiring it."
 PACKAGES is a list of package name symbols.
 With FORCE non-nil, the user is not prompted for confirmation before the
 packages are deleted."
-  (when (or force
-            (yes-or-no-p
-             (pcase packages
-               (`(,package)
-                (format "Delete package `%s'? " package))
-               (_
-                (format "Delete these packages: %s? "
-                        (mapconcat #'symbol-name packages ", "))))))
+  (cond
+   ((null packages)
+    (message "%s" "Nothing to delete"))
+   ((or force
+        (yes-or-no-p
+         (pcase packages
+           (`(,package)
+            (format "Delete package `%s'? " package))
+           (_
+            (format "Delete these packages: %s? "
+                    (mapconcat #'symbol-name packages ", "))))))
     (dolist (package packages)
-      (mapc #'epl-package-delete (epl-find-installed-packages package)))))
+      (mapc #'epl-package-delete (epl-find-installed-packages package))))))
 
 (defun package-safe-delete--prompt-package-name (prompt)
   "Read a package name in the minibuffer.
